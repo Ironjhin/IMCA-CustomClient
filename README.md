@@ -120,6 +120,72 @@ python pipe_server.py
 
 客户端会自动通过 Unix Socket 连接 AI 服务。
 
+## 从源码构建
+
+### 安装所有依赖
+
+```bash
+# 1. Node.js 20+
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# 2. Rust 工具链
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source ~/.cargo/env
+
+# 3. 系统构建依赖（Tauri + FFmpeg + turbojpeg）
+sudo apt install -y \
+  ffmpeg \
+  cmake \
+  pkg-config \
+  libgtk-3-dev \
+  libwebkit2gtk-4.1-dev \
+  libjavascriptcoregtk-4.1-dev \
+  libsoup-3.0-dev \
+  libappindicator3-dev \
+  librsvg2-dev \
+  libssl-dev
+
+# 4. GPU 驱动（按显卡选装）
+# Intel 核显:
+sudo apt install -y intel-media-va-driver vainfo
+# AMD 核显:
+sudo apt install -y mesa-va-drivers vainfo
+# NVIDIA 独显:
+sudo apt install -y nvidia-driver-535
+```
+
+### 编译
+
+```bash
+cd SharkClient-main
+npm install
+npm run tauri build
+```
+
+产物位置：
+- 二进制：`src-tauri/target/release/IMCA_Client_v1_3`
+- deb 包：`src-tauri/target/release/bundle/deb/`
+- AppImage：`src-tauri/target/release/bundle/appimage/`
+
+### 创建桌面快捷方式
+
+```bash
+cat > ~/.local/share/applications/IMCA_Client_v1_3.desktop << 'EOF'
+[Desktop Entry]
+Categories=
+Comment=IMCA Client v1.3
+Exec=<你的路径>/src-tauri/target/release/IMCA_Client_v1_3
+StartupWMClass=IMCA_Client_v1_3
+Icon=<你的路径>/src-tauri/target/release/bundle/appimage/IMCA_Client_v1_3.AppDir/usr/share/icons/hicolor/256x256@2/apps/IMCA_Client_v1_3.png
+Name=IMCA Client v1.3
+Terminal=false
+Type=Application
+EOF
+```
+
+> 把 `<你的路径>` 替换为实际的项目目录绝对路径。
+
 ## 常见问题
 
 **黑屏 / 无画面：**
