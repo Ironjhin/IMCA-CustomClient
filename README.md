@@ -2,6 +2,8 @@
 
 RoboMaster 自定义客户端 — 接收选手端 UDP H.265 图传，GPU 硬件加速解码，MJPEG 流显示。
 
+> 本项目基于 [JNU-Shark](https://github.com/JNU-Shark) 的 SharkClient 开源项目优化改造而来，在此致谢。
+
 ## 快速启动
 
 ```bash
