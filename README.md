@@ -2,6 +2,9 @@
 
 RoboMaster 自定义客户端 — 接收选手端 UDP H.265 图传，GPU 硬件加速解码，MJPEG 流显示。
 
+Vibe Coding得来的RoboMaster2026自定义客户端，
+本项目提供给五邑大学IMCA战队队员使用，欢迎大家在此基础上继续客制化！
+
 > 本项目基于 [JNU-Shark](https://github.com/JNU-Shark) 的 SharkClient 开源项目优化改造而来，在此致谢。
 
 ## 快速启动
