@@ -202,6 +202,23 @@ npm run tauri build
 
 会按 `src-tauri/tauri.conf.json` 的 `bundle.targets` 产出对应安装包（默认 Windows NSIS、Linux deb/AppImage）。
 
+### Linux `.deb` 安装
+
+下载 Release 中的 `.deb` 文件后，在其所在目录执行：
+
+```bash
+sudo apt install ./IMCA_Client_v1_4_1.4.0_amd64.deb
+```
+
+安装完成后可从应用菜单启动；`resources/` 会随安装包一同安装。为减小安装包体积，Release 的 Linux `.deb` 不内置 FFmpeg，首次使用前请安装系统 FFmpeg：
+
+```bash
+sudo apt update
+sudo apt install -y ffmpeg
+```
+
+目标系统为 Ubuntu 22.04+ 或兼容的 Debian 系发行版，缺失的其他系统依赖通常由 `apt` 自动安装。
+
 ---
 
 ## 资源配置
