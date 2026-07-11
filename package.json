@@ -1,7 +1,7 @@
 {
-  "name": "imca-client-v1-3",
+  "name": "imca-client-v1-4",
   "private": true,
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": "JNU-Shark",
   "type": "module",
   "scripts": {

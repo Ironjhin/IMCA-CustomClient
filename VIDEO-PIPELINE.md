@@ -1,4 +1,4 @@
-# IMCA Client v1.3 视频管线使用指南
+# IMCA Client v1.4 视频管线使用指南
 
 > 本文档面向 RoboMaster 比赛场景，说明如何配置 IMCA Client 接收选手端 UDP H.265 图传、通过 GPU 硬件加速解码、以 MJPEG 流显示在前端。支持 Intel / AMD / NVIDIA 三种显卡。
 

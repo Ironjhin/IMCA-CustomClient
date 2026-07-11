@@ -68,7 +68,7 @@ npm run generate:mqtt-proto
 
 ## Project Conventions
 
-- Cargo package name uses hyphens (`imca-client-v1-3`), binary/lib use underscores (`IMCA_Client_v1_3`)
+- Cargo package name uses hyphens (`imca-client-v1-4`), binary/lib use underscores (`IMCA_Client_v1_4`)
 - Release profile: opt-level=3, LTO, codegen-units=1, panic=abort
 - Resources (configs, images, protos) live in `resources/` and are bundled via tauri.conf.json
 - AI detection is an external Python process (SharkVisionLiteServer), not embedded

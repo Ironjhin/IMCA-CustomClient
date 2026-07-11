@@ -166,7 +166,7 @@ fn init_tracing() {
 /// Non-fatal: best-effort only.
 fn print_startup_diagnostics() {
     let cache_dir = config::ensure_cache_dir();
-    info!("========== IMCA Client v1.3 startup ==========");
+    info!("========== IMCA Client v1.4 startup ==========");
     info!(target: "diag", "OS        : {}", std::env::consts::OS);
     info!(target: "diag", "Arch      : {}", std::env::consts::ARCH);
     info!(target: "diag", "Family    : {}", std::env::consts::FAMILY);
