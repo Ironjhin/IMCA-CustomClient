@@ -12,7 +12,7 @@ IMCA Client — a RoboMaster custom ground station client (Tauri 2 + Vue 3 + Rus
 # Development (hot reload)
 npm run tauri dev
 
-# Release build (produces binary + deb + AppImage)
+# Release build (produces binary + configured bundles)
 npm run tauri build
 
 # Generate Protobuf JSON schema from .proto (required before build if proto changed)
@@ -46,14 +46,17 @@ npm run generate:mqtt-proto
 
 ### Key Patterns
 
-**Video pipeline**: UDP → assembly → keyframe gate → FFmpeg subprocess (H.265 decode → scale → MJPEG encode, all GPU) → JPEG SOI/EOI reader → MJPEG HTTP server → `<img>` tag
+**Video pipeline**: UDP → assembly → HEVC keyframe gate → FFmpeg subprocess (H.265 decode → scale → MJPEG encode) → JPEG SOI/EOI reader → MJPEG HTTP server → `<img>` tag. The fast MJPEG path falls back to `SmartDecoder`/libde265 when needed.
 
 **MQTT protocol**: Protobuf v3 over MQTT, server at 192.168.12.1:3333. Proto file: `UDP-MQTT Server/proto/messages.proto`. Frontend uses generated JSON schema.
 
-**Hardware decode order**: QSV (Intel best) → VAAPI (Intel/AMD) → CUDA (NVIDIA) → auto. MJPEG encoder follows: mjpeg_qsv / mjpeg_vaapi / mjpeg (software).
+**Hardware decode order**: QSV (Intel best) → VAAPI (Intel/AMD) → CUDA (NVIDIA) → auto. The selected working backend is cached for the process lifetime. MJPEG output uses `mjpeg_qsv` / `mjpeg_vaapi` where supported; CUDA uses GPU decode and CUDA scaling followed by software MJPEG encoding.
+
+**HEVC recovery**: The UDP bridge recognizes Annex B NAL types, gates delta frames until an IRAP keyframe, caches VPS/SPS/PPS + IDR startup data, and replays that sequence after decoder failure or UDP stream restart. This avoids waiting for a new keyframe after a local decoder fallback.
 
 **Runtime tuning** (env vars, no rebuild needed):
 - `SHARK_VAAPI_SCALE_HEIGHT` — output resolution (480/720/1080/0=raw)
+- `SHARK_VIDEO_MAX_HEIGHT` — FFmpeg GPU decoder output height cap (default 720; `0`/`none` disables scaling)
 - `SHARK_JPEG_QUALITY` — JPEG quality 1-100
 - `SHARK_MAX_FPS` — frame rate cap
 - `SHARK_DECODE_QUEUE` — decode queue depth (1=lowest latency)
@@ -70,7 +73,7 @@ npm run generate:mqtt-proto
 
 - Cargo package name uses hyphens (`imca-client-v1-5`), binary/lib use underscores (`IMCA_Client_v1_5`)
 - Release profile: opt-level=3, LTO, codegen-units=1, panic=abort
-- Resources (configs, images, protos) live in `resources/` and are bundled via tauri.conf.json
+- Resources (configs, images, protos) live in `resources/` and are bundled via tauri.conf.json. Linux release packages intentionally exclude bundled FFmpeg; users install system `ffmpeg`.
 - AI detection is an external Python process (SharkVisionLiteServer), not embedded
 
 ## Protocol Status (V2.0.0)
