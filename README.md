@@ -1,12 +1,18 @@
-# IMCA Client v1.4
+# IMCA Client v1.5
 
-> RoboMaster 风格的多机器人地面站客户端 · Tauri 2 + Vue 3 + Rust · v1.4.0
+本项目基于 [JNU-Shark](https://github.com/JNU-Shark) 的 SharkClient 开源项目优化改造而来，在此致谢。
+
+> RoboMaster 风格的多机器人地面站客户端 · Tauri 2 + Vue 3 + Rust · v1.5.0
 
 IMCA Client 整合了 UDP H.265 视频接收、HUD 自定义叠加、MQTT 双向协议、外置 AI 检测和多种打包形态，目标是提供一份从克隆到运行都能跑通的、面向 RoboMaster 的开源参考实现。
 
-本目录是 **v1.4.0 发行版**。只需准备好 Node.js、Rust 工具链与平台依赖即可进入开发与构建流程。
+本目录是 **v1.5.0 发行版**。只需准备好 Node.js、Rust 工具链与平台依赖即可进入开发与构建流程。
 
-### v1.4 更新亮点
+### v1.5 更新亮点
+
+- **解码器故障恢复**：缓存 VPS/SPS/PPS + IDR 启动序列，MJPEG 快速解码失败后可自动切换到备用解码器
+- **NVIDIA CUDA 修复**：CUDA 解码路径改为 GPU 内缩放后再下载，修复 NV12 滤镜转换失败
+- **轻量 Linux 发布包**：Linux `.deb` 不再内置重复的 FFmpeg 动态库，安装包恢复到约 8 MB，用户使用系统 FFmpeg
 
 - **运行时分辨率切换**：UI 直接切换 480p/720p/1080p/原始分辨率，无需重启应用或重新编译
 - **多 GPU 硬件编码**：自动探测 QSV（Intel）→ VAAPI（Intel/AMD）→ CUDA（NVIDIA），Intel/AMD 全 GPU 管线，NVIDIA GPU 解码 + CPU 编码
@@ -207,7 +213,7 @@ npm run tauri build
 下载 Release 中的 `.deb` 文件后，在其所在目录执行：
 
 ```bash
-sudo apt install ./IMCA_Client_v1_4_1.4.0_amd64.deb
+sudo apt install ./IMCA_Client_v1_5_1.5.0_amd64.deb
 ```
 
 安装完成后可从应用菜单启动；`resources/` 会随安装包一同安装。为减小安装包体积，Release 的 Linux `.deb` 不内置 FFmpeg，首次使用前请安装系统 FFmpeg：
@@ -434,6 +440,11 @@ HUD 组件由 XML + Vue 双层定义；在 `resources/CustomElement/` 与 `resou
 ---
 
 ## 版本与变更
+
+- **v1.5.0** · CUDA 解码和 UDP 视频恢复修复
+  - MJPEG 快速解码失败后重放 HEVC 启动序列，避免切换备用解码器后黑屏。
+  - 修复 NVIDIA CUDA 解码的硬件帧缩放和下载滤镜链。
+  - Linux `.deb` 移除重复的 FFmpeg 资源，改为依赖用户安装系统 FFmpeg。
 
 - **v1.4.0** · MQTT V2 协议更新
   - 对齐地图点击上下行消息、比赛结算字段、哨兵供电状态及哨兵/空中支援指令编号。

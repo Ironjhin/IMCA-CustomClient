@@ -72,6 +72,7 @@ const resizeCanvas = (): void => {
   canvasRef.value.width = width * dpr
   canvasRef.value.height = height * dpr
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  scheduleDraw()
 }
 
 // 加载地图图片
@@ -79,10 +80,12 @@ const loadMapImage = (): void => {
   const img = new Image()
   img.onload = (): void => {
     mapImage.value = img
+    scheduleDraw()
   }
   img.onerror = (): void => {
     console.warn('[MiniMap] 地图图片加载失败:', props.mapImageSrc)
     mapImage.value = null
+    scheduleDraw()
   }
   img.src = props.mapImageSrc
 }
@@ -102,10 +105,8 @@ const worldToCanvas = (
 
 // 绘制函数
 const draw = (): void => {
-  if (!ctx || !canvasRef.value) {
-    animationFrameId = requestAnimationFrame(draw)
-    return
-  }
+  animationFrameId = null
+  if (!ctx || !canvasRef.value) return
 
   const { width, height } = canvasRef.value.getBoundingClientRect()
 
@@ -157,8 +158,12 @@ const draw = (): void => {
 
   // 绘制机器人
   drawRobots(width, height)
+}
 
-  animationFrameId = requestAnimationFrame(draw)
+const scheduleDraw = (): void => {
+  if (animationFrameId === null) {
+    animationFrameId = requestAnimationFrame(draw)
+  }
 }
 
 // 绘制机器人
@@ -236,8 +241,7 @@ onMounted(async () => {
     resizeObserver.observe(containerRef.value)
   }
 
-  // 开始绘制循环
-  animationFrameId = requestAnimationFrame(draw)
+  scheduleDraw()
 })
 
 onUnmounted(() => {
@@ -251,6 +255,12 @@ onUnmounted(() => {
 
 // 监听地图图片变化
 watch(() => props.mapImageSrc, loadMapImage)
+watch(
+  [() => Array.from(mqttStore.redRobots.values()), () => Array.from(mqttStore.blueRobots.values())],
+  scheduleDraw,
+  { deep: true }
+)
+watch([() => props.showGrid, () => props.opacity], scheduleDraw)
 </script>
 
 <style scoped>

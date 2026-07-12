@@ -227,6 +227,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+.dashboard-root *,
+.dashboard-root *::before,
+.dashboard-root *::after {
+  animation: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
 /* Detection toggle button (small inline button near status badge) */
 .detection-toggle-button {
   font-family: inherit;

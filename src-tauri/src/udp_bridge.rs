@@ -18,7 +18,7 @@ mod stats;
 use std::collections::{HashMap, VecDeque};
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex as StdMutex};
+use std::sync::{Arc, Condvar, Mutex as StdMutex, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -190,18 +190,49 @@ fn publish_max_fps() -> u32 {
 const FRAME_ASSEMBLY_TIMEOUT: Duration = Duration::from_millis(120);
 const FRAME_ASSEMBLY_SWEEP_INTERVAL: Duration = Duration::from_millis(20);
 
+static H265_STARTUP_CACHE: OnceLock<StdMutex<Vec<PendingH265Frame>>> = OnceLock::new();
+
+fn h265_startup_cache() -> &'static StdMutex<Vec<PendingH265Frame>> {
+    H265_STARTUP_CACHE.get_or_init(|| StdMutex::new(Vec::new()))
+}
+
 // ==================== H.265 background decoder ====================
 
+#[derive(Clone)]
 struct PendingH265Frame {
     data: Vec<u8>,
     #[allow(dead_code)]
     is_keyframe: bool,
+    is_parameter_set: bool,
     reset_decoder: bool,
 }
 
 struct H265DecodeQueue {
     frames: VecDeque<PendingH265Frame>,
     needs_keyframe: bool,
+}
+
+fn replay_startup_sequence(queue: &mut H265DecodeQueue, snapshot: &[PendingH265Frame]) {
+    while queue.frames.len().saturating_add(snapshot.len()) > decode_queue_capacity() {
+        queue.frames.pop_back();
+    }
+    for pending in snapshot.iter().rev() {
+        let mut replay = pending.clone();
+        replay.reset_decoder = false;
+        queue.frames.push_front(replay);
+    }
+}
+
+fn remember_startup_frame(snapshot: &mut Vec<PendingH265Frame>, pending: &PendingH265Frame) {
+    if pending.is_parameter_set {
+        if snapshot.iter().any(|frame| frame.is_keyframe) {
+            snapshot.clear();
+        }
+        snapshot.push(pending.clone());
+    } else if pending.is_keyframe {
+        snapshot.retain(|frame| frame.is_parameter_set);
+        snapshot.push(pending.clone());
+    }
 }
 
 /// Holds the single most-recently-decoded YUV frame. The decode thread
@@ -560,6 +591,8 @@ async fn udp_receive_loop(
                     let mut mjpeg_dec: Option<MjpegDecoder> = None;
                     let mut smart_dec: Option<SmartDecoder> = None;
                     let use_mjpeg = mjpeg_d.is_some(); // only use MJPEG path when publishing to MJPEG server
+                    let mut mjpeg_failed = false;
+                    let mut startup_sequence = h265_startup_cache().lock().unwrap().clone();
                     let mut waiting_for_keyframe = true;
                     while alive.load(Ordering::Relaxed) {
                         // Decode compressed frames in arrival order.
@@ -580,33 +613,48 @@ async fn udp_receive_loop(
                             break;
                         }
 
+                        remember_startup_frame(&mut startup_sequence, &pending);
+                        if !startup_sequence.is_empty() {
+                            *h265_startup_cache().lock().unwrap() = startup_sequence.clone();
+                        }
+
                         // Wait for a keyframe before feeding any data to the
                         // decoder. Delta frames without a reference cause
                         // "Could not find ref" errors and produce no output.
-                        if waiting_for_keyframe {
-                            if !pending.is_keyframe {
-                                stats_w.dropped_frames.fetch_add(1, Ordering::Relaxed);
-                                continue;
-                            }
-                            waiting_for_keyframe = false;
+                        if pending.reset_decoder {
                             mjpeg_dec = None;
                             smart_dec = None;
-                            stats_w
-                                .decoder_waiting_keyframe
-                                .store(false, Ordering::Relaxed);
+                            waiting_for_keyframe = true;
+                            let (lock, cvar) = &*slot;
+                            let mut guard = lock.lock().unwrap();
+                            replay_startup_sequence(&mut guard, &startup_sequence);
+                            cvar.notify_one();
+                            continue;
                         }
 
-                        let _ = pending.reset_decoder;
+                        if waiting_for_keyframe {
+                            if pending.is_parameter_set {
+                                // Feed VPS/SPS/PPS before the first IDR.
+                            } else if !pending.is_keyframe {
+                                stats_w.dropped_frames.fetch_add(1, Ordering::Relaxed);
+                                continue;
+                            } else {
+                                waiting_for_keyframe = false;
+                                stats_w
+                                    .decoder_waiting_keyframe
+                                    .store(false, Ordering::Relaxed);
+                            }
+                        }
 
                         // Fast path: FFmpeg → MJPEG → publish directly (zero Rust encoding).
-                        if use_mjpeg {
+                        if use_mjpeg && !mjpeg_failed {
                             let d = mjpeg_dec.get_or_insert_with(|| {
                                 MjpegDecoder::new_with_scale(target_scale_h).expect("MjpegDecoder init failed")
                             });
                             if !d.is_alive() {
                                 warn!("MJPEG decoder died, falling back to SmartDecoder");
                                 mjpeg_dec = None;
-                                // Fall through to SmartDecoder path below
+                                mjpeg_failed = true;
                             } else {
                                 match d.decode_to_jpeg(&pending.data) {
                                     Ok(Some(jpeg)) => {
@@ -630,9 +678,23 @@ async fn udp_receive_loop(
                                     Err(e) => {
                                         warn!(error = %e, "MJPEG decode error, falling back to SmartDecoder");
                                         mjpeg_dec = None;
-                                        // Fall through to SmartDecoder
+                                        mjpeg_failed = true;
                                     }
                                 }
+                            }
+
+                            if mjpeg_failed {
+                                let (lock, cvar) = &*slot;
+                                let mut guard = lock.lock().unwrap();
+                                guard.frames.push_front(pending);
+                                replay_startup_sequence(&mut guard, &startup_sequence);
+                                stats_w
+                                    .decode_queue_depth
+                                    .store(guard.frames.len() as u32, Ordering::Relaxed);
+                                cvar.notify_one();
+                                smart_dec = None;
+                                waiting_for_keyframe = true;
+                                continue;
                             }
                         }
 
@@ -1209,7 +1271,8 @@ fn send_frame_to_frontend(
         // on every overload looks like "first frame then frozen".
         let (lock, cvar) = &**h265_slot;
         let mut guard = lock.lock().unwrap();
-        if guard.needs_keyframe && !info.is_keyframe {
+        let is_parameter_set = matches!(info.nal_type, Some(32..=34));
+        if guard.needs_keyframe && !info.is_keyframe && !is_parameter_set {
             stats.dropped_frames.fetch_add(1, Ordering::Relaxed);
             stats
                 .decode_queue_depth
@@ -1262,22 +1325,19 @@ fn send_frame_to_frontend(
         }
 
         if guard.needs_keyframe {
-            if !info.is_keyframe {
-                stats.dropped_frames.fetch_add(1, Ordering::Relaxed);
-                stats.decode_queue_depth.store(0, Ordering::Relaxed);
-                let _ = (app, frame_channel, decoder);
-                return;
+            if info.is_keyframe {
+                guard.needs_keyframe = false;
+                reset_decoder = !guard.frames.iter().any(|frame| frame.is_parameter_set);
+                stats
+                    .decoder_waiting_keyframe
+                    .store(false, Ordering::Relaxed);
             }
-            guard.needs_keyframe = false;
-            reset_decoder = true;
-            stats
-                .decoder_waiting_keyframe
-                .store(false, Ordering::Relaxed);
         }
 
         guard.frames.push_back(PendingH265Frame {
             data,
             is_keyframe: info.is_keyframe,
+            is_parameter_set,
             reset_decoder,
         });
         stats
@@ -1309,4 +1369,38 @@ fn send_frame_to_frontend(
         info.is_keyframe,
         &data,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{replay_startup_sequence, H265DecodeQueue, PendingH265Frame};
+    use std::collections::VecDeque;
+
+    fn frame(label: u8, is_keyframe: bool, is_parameter_set: bool) -> PendingH265Frame {
+        PendingH265Frame {
+            data: vec![label],
+            is_keyframe,
+            is_parameter_set,
+            reset_decoder: false,
+        }
+    }
+
+    #[test]
+    fn decoder_fallback_replays_startup_sequence() {
+        let snapshot = vec![
+            frame(32, false, true),
+            frame(33, false, true),
+            frame(34, false, true),
+            frame(20, true, false),
+        ];
+        let mut queue = H265DecodeQueue {
+            frames: VecDeque::from([frame(1, false, false)]),
+            needs_keyframe: true,
+        };
+
+        replay_startup_sequence(&mut queue, &snapshot);
+
+        let labels: Vec<u8> = queue.frames.iter().map(|pending| pending.data[0]).collect();
+        assert_eq!(labels, vec![32, 33, 34, 20, 1]);
+    }
 }

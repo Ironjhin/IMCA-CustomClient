@@ -3689,7 +3689,7 @@ const handlePlaceGraphicTemplate = (payload: {
     <div
       class="hud-layer"
       :class="{ interactive: isHudInteractive }"
-      v-show="!isDrawingMode"
+      v-if="!isDrawingMode && !isSettingsVisible"
       @contextmenu="handleHudContextMenu"
     >
       <!-- HUD 编辑模式指示器 -->
@@ -3831,7 +3831,7 @@ const handlePlaceGraphicTemplate = (payload: {
 
     <!-- 重命名模态框 -->
     <Transition name="modal-fade">
-      <div v-if="renameModal.visible" class="modal-backdrop" @click="renameModal.visible = false">
+      <div v-if="renameModal.visible" class="modal-backdrop" @click.self="renameModal.visible = false">
         <div class="modal-content rename-modal" @click.stop>
           <div class="settings-header">
             <h3>重命名窗口</h3>
@@ -3855,7 +3855,7 @@ const handlePlaceGraphicTemplate = (payload: {
     </Transition>
 
     <Transition name="modal-fade">
-      <div v-if="isSettingsVisible" class="modal-backdrop" @click="isSettingsVisible = false">
+      <div v-if="isSettingsVisible" class="modal-backdrop" @click.self="isSettingsVisible = false">
         <div class="modal-content settings-modal" @click.stop>
           <button class="modal-close-btn" title="Close" @click="isSettingsVisible = false">
             ×
@@ -3968,7 +3968,7 @@ const handlePlaceGraphicTemplate = (payload: {
           <!-- 标签页内容 -->
           <div ref="tabsContentEl" class="tabs-content">
             <!-- 视频源标签页 -->
-            <div v-show="activeTab === 'video'" class="tab-panel">
+            <div v-if="activeTab === 'video'" class="tab-panel">
               <VideoSourceManager
                 v-model:video-source="videoSource"
                 v-model:selected-camera-id="selectedCameraId"
@@ -3989,7 +3989,7 @@ const handlePlaceGraphicTemplate = (payload: {
             </div>
 
             <!-- 网络标签页 -->
-            <div v-show="activeTab === 'network'" class="tab-panel">
+            <div v-if="activeTab === 'network'" class="tab-panel">
               <div class="panel-section">
                 <h4 class="section-title">
                   <svg
@@ -4341,7 +4341,7 @@ const handlePlaceGraphicTemplate = (payload: {
             </div>
 
             <!-- 机器人标签页 -->
-            <div v-show="activeTab === 'robot'" class="tab-panel">
+            <div v-if="activeTab === 'robot'" class="tab-panel">
               <!-- 机器人模式设置组件 -->
               <RoboModeSettings
                 v-model="selectedRobot"
@@ -4367,7 +4367,7 @@ const handlePlaceGraphicTemplate = (payload: {
             </div>
 
             <!-- 显示标签页 -->
-            <div v-show="activeTab === 'hotkeys'" class="tab-panel">
+            <div v-if="activeTab === 'hotkeys'" class="tab-panel">
               <div class="panel-section">
                 <h4 class="section-title">
                   <svg
@@ -4423,7 +4423,7 @@ const handlePlaceGraphicTemplate = (payload: {
               </div>
             </div>
 
-            <div v-show="activeTab === 'display'" class="tab-panel">
+            <div v-if="activeTab === 'display'" class="tab-panel">
               <div class="panel-section">
                 <h4 class="section-title">
                   <svg
@@ -4884,7 +4884,7 @@ const handlePlaceGraphicTemplate = (payload: {
       <div
         v-if="isCrosshairSettingsVisible"
         class="modal-backdrop"
-        @click="isCrosshairSettingsVisible = false"
+        @click.self="isCrosshairSettingsVisible = false"
       >
         <div class="modal-content modal-wide" @click.stop>
           <button class="modal-close-btn" title="Close" @click="isCrosshairSettingsVisible = false">
@@ -5419,17 +5419,9 @@ const handlePlaceGraphicTemplate = (payload: {
   display: flex;
   flex-direction: column;
   /* 磨砂玻璃效果 - 与 StatusBar/HudPanel 统一 */
-  background-color: rgba(25, 28, 38, 0.65);
-  backdrop-filter: blur(30px) saturate(1.2);
-  -webkit-backdrop-filter: blur(30px) saturate(1.2);
+  background-color: rgb(25, 28, 38);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
-  box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.05),
-    0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  /* GPU 加速优化 */
-  transform: translateZ(0);
-  contain: layout style;
 }
 
 .settings-header {
@@ -5512,13 +5504,6 @@ const handlePlaceGraphicTemplate = (payload: {
   overflow-y: auto;
   padding: 24px 28px;
   min-height: 320px;
-  /* 滚动性能优化 */
-  overscroll-behavior-y: auto;
-  -webkit-overflow-scrolling: touch;
-  will-change: scroll-position;
-  contain: layout paint;
-  /* 滚动行为 */
-  scroll-behavior: smooth;
   /* 隐藏滚动条但保持功能 */
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
@@ -5546,8 +5531,6 @@ const handlePlaceGraphicTemplate = (payload: {
   display: flex;
   flex-direction: column;
   gap: 24px;
-  /* 渲染优化 */
-  contain: content;
 }
 
 /* 配置管理分隔线 */

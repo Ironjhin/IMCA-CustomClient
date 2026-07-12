@@ -10,7 +10,7 @@ use std::io::{BufWriter, Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdout, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::thread::JoinHandle;
 
 use tracing::{debug, error, info, warn};
@@ -245,6 +245,12 @@ fn preferred_hwaccels() -> &'static [&'static str] {
     }
 }
 
+static WORKING_HWACCEL: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn working_hwaccel() -> &'static Mutex<Option<String>> {
+    WORKING_HWACCEL.get_or_init(|| Mutex::new(None))
+}
+
 /// Probe whether a specific hwaccel is enumerated by the FFmpeg binary.
 /// Runs `ffmpeg -hide_banner -hwaccels` for the given binary and caches
 /// the result per-binary path so switching `SHARK_FFMPEG_PATH` at runtime
@@ -290,13 +296,22 @@ impl GpuDecoder {
         let ffmpeg = find_ffmpeg().ok_or_else(|| "FFmpeg not found in PATH".to_string())?;
 
         let mut last_err = String::from("no hwaccel attempted");
+        if let Some(hwaccel) = working_hwaccel().lock().unwrap().clone() {
+            if let Ok(decoder) = Self::spawn_with_hwaccel(&ffmpeg, &hwaccel) {
+                return Ok(decoder);
+            }
+            *working_hwaccel().lock().unwrap() = None;
+        }
         for hwaccel in preferred_hwaccels() {
             // "auto" is always worth trying even when not enumerated.
             if *hwaccel != "auto" && !ffmpeg_lists_hwaccel(&ffmpeg, hwaccel) {
                 continue;
             }
             match Self::spawn_with_hwaccel(&ffmpeg, hwaccel) {
-                Ok(decoder) => return Ok(decoder),
+                Ok(decoder) => {
+                    *working_hwaccel().lock().unwrap() = Some((*hwaccel).to_string());
+                    return Ok(decoder);
+                }
                 Err(e) => {
                     debug!(%hwaccel, error = %e, "hwaccel attempt failed");
                     last_err = format!("{} (last hwaccel: {})", e, hwaccel);
@@ -390,12 +405,20 @@ impl GpuDecoder {
             }
             filter_chain.push("format=yuv420p".into());
         } else if hwaccel == "cuda" {
-            // NVIDIA NVDEC: download to system memory.
+            // NVIDIA NVDEC: resize while frames are still in CUDA memory,
+            // then download once to system memory for the Y4M output.
+            extra_hw_args.push("-hwaccel_output_format".to_string());
+            extra_hw_args.push("cuda".to_string());
+            if max_height > 0 {
+                filter_chain.push(format!(
+                    "scale_cuda=w='trunc(min(iw,iw*{h}/ih)/2)*2':h='trunc(min(ih,{h})/2)*2':format=nv12",
+                    h = max_height
+                ));
+            } else {
+                filter_chain.push("scale_cuda=w='trunc(iw/2)*2':h='trunc(ih/2)*2':format=nv12".into());
+            }
             filter_chain.push("hwdownload".into());
             filter_chain.push("format=nv12".into());
-            if let Some(scale) = scale_clause {
-                filter_chain.push(scale);
-            }
             filter_chain.push("format=yuv420p".into());
         } else {
             // d3d11va / dxva2 / videotoolbox / auto: FFmpeg auto-downloads by default.
@@ -775,12 +798,21 @@ impl MjpegGpuDecoder {
         let ffmpeg = find_ffmpeg().ok_or_else(|| "FFmpeg not found in PATH".to_string())?;
 
         let mut last_err = String::from("no hwaccel attempted");
+        if let Some(hwaccel) = working_hwaccel().lock().unwrap().clone() {
+            if let Ok(decoder) = Self::spawn_with_hwaccel(&ffmpeg, &hwaccel, scale_height) {
+                return Ok(decoder);
+            }
+            *working_hwaccel().lock().unwrap() = None;
+        }
         for hwaccel in preferred_hwaccels() {
             if *hwaccel != "auto" && !ffmpeg_lists_hwaccel(&ffmpeg, hwaccel) {
                 continue;
             }
             match Self::spawn_with_hwaccel(&ffmpeg, hwaccel, scale_height) {
-                Ok(decoder) => return Ok(decoder),
+                Ok(decoder) => {
+                    *working_hwaccel().lock().unwrap() = Some((*hwaccel).to_string());
+                    return Ok(decoder);
+                }
                 Err(e) => {
                     debug!(%hwaccel, error = %e, "mjpeg hwaccel attempt failed");
                     last_err = format!("{} (last hwaccel: {})", e, hwaccel);
@@ -862,12 +894,20 @@ impl MjpegGpuDecoder {
                 }
             }
             "cuda" => {
-                // NVIDIA: CUDA decode → download → software encode.
+                // NVIDIA: resize in CUDA memory, then download once for the
+                // software MJPEG encoder.
+                extra_hw_args.push("-hwaccel_output_format".to_string());
+                extra_hw_args.push("cuda".to_string());
+                if scale_h > 0 {
+                    filter_chain.push(format!(
+                        "scale_cuda=w=-2:h={}:format=nv12",
+                        scale_h
+                    ));
+                } else {
+                    filter_chain.push("scale_cuda=w=iw:h=ih:format=nv12".into());
+                }
                 filter_chain.push("hwdownload".into());
                 filter_chain.push("format=nv12".into());
-                if scale_h > 0 {
-                    filter_chain.push(format!("scale=w=-2:h={}", scale_h));
-                }
                 filter_chain.push("format=yuvj420p".into());
             }
             _ => {
@@ -904,7 +944,7 @@ impl MjpegGpuDecoder {
         cmd.args([
             "-c:v", mjpeg_codec,
             "-qmin", "1", "-q:v", &jpeg_quality.to_string(),
-            "-f", "rawvideo",
+            "-f", "image2pipe",
             "-pix_fmt", "yuvj420p",
             "-an", "-v", "error",
             "pipe:1",
@@ -1020,9 +1060,7 @@ impl Drop for MjpegGpuDecoder {
     }
 }
 
-/// Read raw JPEG frames from FFmpeg's rawvideo MJPEG output.
-///
-/// FFmpeg's `-f rawvideo` with mjpeg codec outputs raw JPEG frames back-to-back.
+/// Read JPEG frames from FFmpeg's image2pipe output.
 /// We split by scanning for JPEG SOI (FF D8) and EOI (FF D9) markers.
 fn spawn_mjpeg_reader(mut stdout: ChildStdout, frame_tx: Sender<JpegFrame>) -> JoinHandle<()> {
     std::thread::spawn(move || {
