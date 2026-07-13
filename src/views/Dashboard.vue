@@ -371,17 +371,9 @@ const crosshairConfig = ref<CrosshairConfig>({
  * 根据选择的队伍和机器人类型从 MQTT 数据中获取血量
  */
 const currentRobotHealthPercentage = computed(() => {
-  const team = selectedTeam || 'red'
-  const robotList = team === 'red' ? mqttDataStore.redRobotList : mqttDataStore.blueRobotList
-
-  // 如果没有机器人数据，返回满血（避免误触发低血量效果）
-  if (robotList.length === 0) {
-    return 100
-  }
-
-  // 简单实现：使用第一个机器人的血量
-  // TODO: 根据 selectedRobot 匹配具体机器人类型
-  const robot = robotList[0]
+  const robot = mqttDataStore.allRobots.find(
+    ({ robotId }) => robotId === selectedVehicleId.value
+  )
   if (!robot || robot.maxHealth <= 0) {
     return 100
   }
