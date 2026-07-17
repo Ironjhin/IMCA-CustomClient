@@ -1809,8 +1809,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "imca-client-v1-5"
-version = "1.5.0"
+name = "imca-client-v1-6"
+version = "1.6.0"
 dependencies = [
  "base64 0.22.1",
  "cc",

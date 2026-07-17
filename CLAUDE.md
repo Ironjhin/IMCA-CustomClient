@@ -71,7 +71,7 @@ npm run generate:mqtt-proto
 
 ## Project Conventions
 
-- Cargo package name uses hyphens (`imca-client-v1-5`), binary/lib use underscores (`IMCA_Client_v1_5`)
+- Cargo package name uses hyphens (`imca-client-v1-6`), binary/lib use underscores (`IMCA_Client_v1_6`)
 - Release profile: opt-level=3, LTO, codegen-units=1, panic=abort
 - Resources (configs, images, protos) live in `resources/` and are bundled via tauri.conf.json. Linux release packages intentionally exclude bundled FFmpeg; users install system `ffmpeg`.
 - AI detection is an external Python process (SharkVisionLiteServer), not embedded

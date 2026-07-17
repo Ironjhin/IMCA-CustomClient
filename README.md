@@ -1,12 +1,17 @@
-# IMCA Client v1.5
+# IMCA Client v1.6
 
 本项目基于 [JNU-Shark](https://github.com/JNU-Shark) 的 SharkClient 开源项目优化改造而来，在此致谢。
 
-> RoboMaster 风格的多机器人地面站客户端 · Tauri 2 + Vue 3 + Rust · v1.5.0
+> RoboMaster 风格的多机器人地面站客户端 · Tauri 2 + Vue 3 + Rust · v1.6.0
 
 IMCA Client 整合了 UDP H.265 视频接收、HUD 自定义叠加、MQTT 双向协议、外置 AI 检测和多种打包形态，目标是提供一份从克隆到运行都能跑通的、面向 RoboMaster 的开源参考实现。
 
-本目录是 **v1.5.0 发行版**。只需准备好 Node.js、Rust 工具链与平台依赖即可进入开发与构建流程。
+本目录是 **v1.6.0 发行版**。只需准备好 Node.js、Rust 工具链与平台依赖即可进入开发与构建流程。
+
+### v1.6 更新亮点
+
+- **MQTT 自动连接修复**：选择登录机器人并更新 Client ID 后，连接失败或断开状态会自动重连
+- **低血量遮罩修复**：红色边缘遮罩改为读取当前登录机器人的血量，不再误用队伍内第一台机器人数据
 
 ### v1.5 更新亮点
 
@@ -213,7 +218,7 @@ npm run tauri build
 下载 Release 中的 `.deb` 文件后，在其所在目录执行：
 
 ```bash
-sudo apt install ./IMCA_Client_v1_5_1.5.0_amd64.deb
+sudo apt install ./IMCA_Client_v1_6_1.6.0_amd64.deb
 ```
 
 安装完成后可从应用菜单启动；`resources/` 会随安装包一同安装。为减小安装包体积，Release 的 Linux `.deb` 不内置 FFmpeg，首次使用前请安装系统 FFmpeg：
@@ -441,6 +446,7 @@ HUD 组件由 XML + Vue 双层定义；在 `resources/CustomElement/` 与 `resou
 
 ## 版本与变更
 
+- **v1.6.0** · MQTT 自动连接与低血量遮罩修复
 - **v1.5.0** · CUDA 解码和 UDP 视频恢复修复
   - MJPEG 快速解码失败后重放 HEVC 启动序列，避免切换备用解码器后黑屏。
   - 修复 NVIDIA CUDA 解码的硬件帧缩放和下载滤镜链。

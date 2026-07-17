@@ -2928,10 +2928,12 @@ watch(
   effectiveMqttClientId,
   (clientId, previousClientId) => {
     if (!clientId || !previousClientId || clientId === previousClientId) return
-    if (mqttStatus.value !== 'connected') return
-    if (mqttConnectedClientId === clientId) return
 
-    scheduleMqttClientIdReconnect(clientId)
+    if (mqttStatus.value === 'connected') {
+      if (mqttConnectedClientId !== clientId) scheduleMqttClientIdReconnect(clientId)
+    } else if (mqttStatus.value !== 'connecting') {
+      void connectMqtt({ auto: true, reason: 'client-id-change' })
+    }
   }
 )
 

@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    imca_client_v1_5_lib::run()
+    imca_client_v1_6_lib::run()
 }

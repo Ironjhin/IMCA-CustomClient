@@ -1,18 +1,18 @@
 [package]
-name = "imca-client-v1-5"
-version = "1.5.0"
-description = "IMCA Client v1.5"
+name = "imca-client-v1-6"
+version = "1.6.0"
+description = "IMCA Client v1.6"
 authors = ["JNU-Shark"]
 edition = "2021"
 
 [[bin]]
-name = "IMCA_Client_v1_5"
+name = "IMCA_Client_v1_6"
 path = "src/main.rs"
 
 [lib]
 # The `_lib` suffix is required on Windows so the library name stays unique
 # and does not conflict with the binary name.
-name = "imca_client_v1_5_lib"
+name = "imca_client_v1_6_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
