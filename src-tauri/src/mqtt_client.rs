@@ -13,6 +13,7 @@ use tracing::{info, warn};
 
 const MQTT_MESSAGE_BATCH_MAX_LEN: usize = 64;
 const MQTT_MESSAGE_BATCH_INTERVAL_MS: u64 = 16;
+const MQTT_INITIAL_CONNECT_TIMEOUT_SECS: u64 = 30;
 
 // ==================== Payload Types ====================
 
@@ -367,8 +368,11 @@ pub async fn mqtt_connect(
         *state.listen_task.lock().unwrap() = Some(handle);
     }
 
-    let initial_connect_result =
-        tokio::time::timeout(tokio::time::Duration::from_secs(5), initial_connect_rx).await;
+    let initial_connect_result = tokio::time::timeout(
+        tokio::time::Duration::from_secs(MQTT_INITIAL_CONNECT_TIMEOUT_SECS),
+        initial_connect_rx,
+    )
+    .await;
 
     match initial_connect_result {
         Ok(Ok(Ok(()))) => Ok(true),
